@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AgentStore.self) var store
+    @Environment(InlineAgentManager.self) var inlineAgent
     @State private var selectedAgentId: String?
     @State private var selectedChannelId: String?
     @State private var runners: [String: ClaudeRunner] = [:]
@@ -67,7 +68,7 @@ struct ContentView: View {
             NewChannelSheet().environment(store)
         }
         .sheet(isPresented: $showGlobalSettings) {
-            GlobalSettingsView().environment(store)
+            GlobalSettingsView().environment(store).environment(inlineAgent)
         }
         .onAppear {
             seedRunners()

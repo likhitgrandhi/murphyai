@@ -6,6 +6,7 @@ import CoreText
 struct KinApp: App {
     @State private var store = AgentStore()
     @State private var inlineAgent = InlineAgentManager()
+    @State private var runnerStore = RunnerStore()
     @AppStorage("kinTheme") private var kinTheme = "dark"
 
     init() {
@@ -17,10 +18,11 @@ struct KinApp: App {
             ContentView()
                 .environment(store)
                 .environment(inlineAgent)
+                .environment(runnerStore)
                 .preferredColorScheme(kinTheme == "light" ? .light : .dark)
                 .onAppear {
                     applyAppearance(kinTheme)
-                    inlineAgent.bootstrap(store: store)
+                    inlineAgent.bootstrap(store: store, runnerStore: runnerStore)
                 }
                 .onChange(of: kinTheme) { _, newTheme in applyAppearance(newTheme) }
         }

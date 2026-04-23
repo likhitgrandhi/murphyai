@@ -84,6 +84,9 @@ final class ScreenRegionPicker: NSWindow {
     private let targetScreen: NSScreen
     private var keyMonitor: Any?
 
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
     init(screen: NSScreen) {
         self.targetScreen = screen
 
@@ -115,7 +118,8 @@ final class ScreenRegionPicker: NSWindow {
 
     func present() {
         alphaValue = 0
-        makeKeyAndOrderFront(nil)
+        orderFrontRegardless()
+        makeKey()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             animator().alphaValue = 1

@@ -334,7 +334,7 @@ struct GlobalSettingsView: View {
                     Text("Activate with shake gesture")
                         .font(Kin.inter(13, weight: .medium))
                         .foregroundStyle(Kin.textPrimary)
-                    Text("Shake cursor while dragging.")
+                    Text("Shake cursor to activate.")
                         .font(.system(size: 12))
                         .foregroundStyle(Kin.textSecondary)
                 }

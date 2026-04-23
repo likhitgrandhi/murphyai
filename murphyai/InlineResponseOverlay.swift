@@ -127,6 +127,9 @@ final class InlineResponseOverlay: NSWindow {
     private var clickMonitor: Any?
     private var dismissAction: (() -> Void)?
 
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
     init(runner: ClaudeRunner, agentName: String, onDismiss: @escaping () -> Void) {
         let screen = NSScreen.main ?? NSScreen.screens[0]
 
@@ -157,7 +160,8 @@ final class InlineResponseOverlay: NSWindow {
 
     func present() {
         alphaValue = 0
-        makeKeyAndOrderFront(nil)
+        orderFrontRegardless()
+        makeKey()
         animateIn()
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in

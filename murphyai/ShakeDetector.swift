@@ -4,10 +4,10 @@ struct ShakeDetector {
     private var samples: [(position: CGPoint, time: TimeInterval)] = []
     private var lastFiredAt: TimeInterval = -.infinity
 
-    var windowDuration: TimeInterval = 0.4
+    var windowDuration: TimeInterval = 0.3
     var minReverseCount: Int = 3
-    var minSpeed: CGFloat = 600
-    var cooldownDuration: TimeInterval = 1.5
+    var minSpeed: CGFloat = 250
+    var cooldownDuration: TimeInterval = 1.0
 
     mutating func record(point: CGPoint, at time: TimeInterval) -> CGPoint? {
         samples.append((position: point, time: time))

@@ -3,6 +3,11 @@ import SwiftUI
 
 final class InlineInputPanel: NSPanel {
     private let hostingView: NSHostingView<InlineInputView>
+    private var keyMonitor: Any?
+    private let onDismissAction: () -> Void
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
 
     init(vm: InlineInputViewModel,
          onSend: @escaping () -> Void,
@@ -10,6 +15,7 @@ final class InlineInputPanel: NSPanel {
          onDismiss: @escaping () -> Void,
          onFirstKey: @escaping () -> Void) {
 
+        self.onDismissAction = onDismiss
         let content = InlineInputView(
             vm: vm,
             onSend: onSend,
@@ -22,11 +28,13 @@ final class InlineInputPanel: NSPanel {
 
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 60),
-            styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],
+            styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless, .titled],
             backing: .buffered,
             defer: false
         )
 
+        titleVisibility = .hidden
+        titlebarAppearsTransparent = true
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovable = false
@@ -35,6 +43,7 @@ final class InlineInputPanel: NSPanel {
         hasShadow = false
         contentView = hostingView
         isReleasedWhenClosed = false
+        hidesOnDeactivate = false
     }
 
     func move(to screenPoint: CGPoint, animated: Bool) {
@@ -44,29 +53,36 @@ final class InlineInputPanel: NSPanel {
 
         if let screen = NSScreen.main {
             let vis = screen.visibleFrame
-            origin.x = min(origin.x, vis.maxX - panelWidth - 8)
-            origin.x = max(origin.x, vis.minX + 8)
-            origin.y = min(origin.y, vis.maxY - panelHeight - 8)
-            origin.y = max(origin.y, vis.minY + 8)
+            origin.x = Swift.min(origin.x, vis.maxX - panelWidth - 8)
+            origin.x = Swift.max(origin.x, vis.minX + 8)
+            origin.y = Swift.min(origin.y, vis.maxY - panelHeight - 8)
+            origin.y = Swift.max(origin.y, vis.minY + 8)
         }
 
         let newFrame = NSRect(origin: origin, size: NSSize(width: panelWidth, height: panelHeight))
-
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.08
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                animator().setFrame(newFrame, display: true)
-            }
-        } else {
-            setFrame(newFrame, display: false)
-        }
+        setFrame(newFrame, display: true, animate: false)
     }
 
     func show(at point: CGPoint) {
         move(to: point, animated: false)
         alphaValue = 0
-        makeKeyAndOrderFront(nil)
+        orderFrontRegardless()
+        makeKey()
+
+        // Focus the text field after the hosting view's first layout.
+        DispatchQueue.main.async { [weak self] in
+            self?.focusTextField()
+        }
+
+        // Local key monitor for Esc (belt-and-suspenders; TextField coordinator also handles it)
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 {
+                self?.onDismissAction()
+                return nil
+            }
+            return event
+        }
+
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -74,7 +90,23 @@ final class InlineInputPanel: NSPanel {
         }
     }
 
+    private func focusTextField() {
+        guard let contentView = contentView else { return }
+        if let field = findTextField(in: contentView) {
+            makeFirstResponder(field)
+        }
+    }
+
+    private func findTextField(in view: NSView) -> NSTextField? {
+        if let tf = view as? NSTextField { return tf }
+        for sub in view.subviews {
+            if let found = findTextField(in: sub) { return found }
+        }
+        return nil
+    }
+
     func hide(completion: @escaping () -> Void = {}) {
+        if let km = keyMonitor { NSEvent.removeMonitor(km); keyMonitor = nil }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)

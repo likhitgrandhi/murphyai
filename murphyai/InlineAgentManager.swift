@@ -19,13 +19,18 @@ final class InlineAgentManager {
     private var regionPicker: ScreenRegionPicker?
     private var responseOverlay: InlineResponseOverlay?
     private var vm = InlineInputViewModel()
-    private var ephemeralRunner: ClaudeRunner?
     private var activeAgent: AgentConfig?
     private var panelAnchoredToCursor = true
+    private weak var runnerStore: RunnerStore?
+    private weak var agentStore: AgentStore?
+    private var pendingWatch: Task<Void, Never>?
+    private var previousApp: NSRunningApplication?
 
     // MARK: - Bootstrap
 
-    func bootstrap(store: AgentStore) {
+    func bootstrap(store: AgentStore, runnerStore: RunnerStore) {
+        self.agentStore = store
+        self.runnerStore = runnerStore
         checkPermissions()
         updateSensitivity()
         installGlobalMonitor(store: store)
@@ -69,9 +74,8 @@ final class InlineAgentManager {
 
     private func installGlobalMonitor(store: AgentStore) {
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            guard let self else { return }
-            Task { @MainActor in
-                self.handleMouseMoved(event: event, store: store)
+            MainActor.assumeIsolated {
+                self?.handleMouseMoved(event: event, store: store)
             }
         }
     }
@@ -88,9 +92,18 @@ final class InlineAgentManager {
     // MARK: - Shake handling
 
     private func handleShake(at point: CGPoint, store: AgentStore) {
-        let selectedText = accessibilityGranted ? AccessibilityHelper.selectedTextFromFrontmostApp() : nil
+        accessibilityGranted = AccessibilityHelper.isGranted()
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
+            previousApp = frontmost
+        }
+        let selectedText = AccessibilityHelper.selectedTextFromFrontmostApp()
         let agent = resolveAgent(from: store)
         showInputPanel(at: point, selectedText: selectedText, agent: agent)
+    }
+
+    private func restorePreviousApp() {
+        previousApp?.activate(options: [])
     }
 
     private func resolveAgent(from store: AgentStore) -> AgentConfig {
@@ -117,21 +130,11 @@ final class InlineAgentManager {
             }
         )
         inputPanel = panel
-        panelAnchoredToCursor = true
+        panelAnchoredToCursor = false
         panel.show(at: point)
-        startFollowMonitor()
     }
 
-    private func startFollowMonitor() {
-        followMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            guard let self else { return }
-            Task { @MainActor in
-                guard self.panelAnchoredToCursor, let panel = self.inputPanel else { return }
-                panel.move(to: NSEvent.mouseLocation, animated: true)
-            }
-        }
-    }
-
+    private func startFollowMonitor() {}
     private func stopFollowMonitor() {
         if let m = followMonitor { NSEvent.removeMonitor(m); followMonitor = nil }
     }
@@ -168,7 +171,8 @@ final class InlineAgentManager {
 
     private func restorePanel() {
         guard let panel = inputPanel else { return }
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
+        panel.makeKey()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -179,7 +183,9 @@ final class InlineAgentManager {
     // MARK: - Send
 
     private func sendToAgent() {
-        guard let agent = activeAgent else { return }
+        guard let agent = activeAgent,
+              let store = agentStore,
+              let runnerStore = runnerStore else { return }
         let text = vm.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
@@ -187,17 +193,40 @@ final class InlineAgentManager {
         if let sel = vm.selectedText {
             prompt += "\n\n[Selected text from screen:\n\(sel)]"
         }
-        if vm.capturedImage != nil {
-            prompt += "\n\n[User attached a screenshot — describe or analyze what you see if asked]"
+        if let image = vm.capturedImage, let path = saveImageToTemp(image) {
+            prompt += "\n\n[User attached a screenshot at: \(path). Use the Read tool on that path to view and analyze it.]"
         }
 
-        let runner = ClaudeRunner(conversationURL: nil)
-        ephemeralRunner = runner
-        inputPanel?.hide()
+        let runner = runnerStore.runner(for: agent, store: store)
         stopFollowMonitor()
+        inputPanel?.hide { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.inputPanel = nil
+                self?.restorePreviousApp()
+            }
+        }
 
-        runner.send(userMessage: prompt, agent: agent, memoryContent: "")
-        showResponseOverlay(runner: runner, agentName: agent.name)
+        let baseline = runner.messages.count
+        runner.send(userMessage: prompt, agent: agent, memoryContent: store.memoryContent(for: agent))
+        watchForResponse(runner: runner, agentName: agent.name, baseline: baseline)
+    }
+
+    private func watchForResponse(runner: ClaudeRunner, agentName: String, baseline: Int) {
+        pendingWatch?.cancel()
+        pendingWatch = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                if !runner.isStreaming {
+                    if let last = runner.messages.last,
+                       runner.messages.count > baseline,
+                       last.role == .assistant,
+                       !last.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        self?.showResponseOverlay(runner: runner, agentName: agentName)
+                        return
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
+        }
     }
 
     // MARK: - Response overlay
@@ -219,15 +248,31 @@ final class InlineAgentManager {
         inputPanel?.hide { [weak self] in
             Task { @MainActor [weak self] in
                 self?.inputPanel = nil
+                self?.restorePreviousApp()
             }
         }
     }
 
+    private func saveImageToTemp(_ image: CGImage) -> String? {
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return nil }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kin-inline", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("screenshot-\(UUID().uuidString).png")
+        do {
+            try data.write(to: url)
+            return url.path
+        } catch { return nil }
+    }
+
     private func cleanup() {
+        pendingWatch?.cancel()
+        pendingWatch = nil
         responseOverlay = nil
-        ephemeralRunner = nil
         inputPanel = nil
         activeAgent = nil
         vm = InlineInputViewModel()
+        restorePreviousApp()
+        previousApp = nil
     }
 }

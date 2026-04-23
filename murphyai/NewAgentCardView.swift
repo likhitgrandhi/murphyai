@@ -5,11 +5,13 @@ import SwiftUI
 private enum AppSettingsSection: Hashable {
     case general
     case appearance
+    case inlineAgent
 
     var label: String {
         switch self {
-        case .general:    return "General"
-        case .appearance: return "Appearance"
+        case .general:     return "General"
+        case .appearance:  return "Appearance"
+        case .inlineAgent: return "Inline Agent"
         }
     }
 }
@@ -20,6 +22,7 @@ private enum AppSettingsSection: Hashable {
 
 struct GlobalSettingsView: View {
     @Environment(AgentStore.self) var store
+    @Environment(InlineAgentManager.self) var inlineAgent
     @Environment(\.dismiss) private var dismiss
     @State private var selection: AppSettingsSection = .general
     @AppStorage("kinTheme") private var selectedTheme = "dark"
@@ -98,6 +101,7 @@ struct GlobalSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 navButton(.general)
                 navButton(.appearance)
+                navButton(.inlineAgent)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 16)
@@ -145,8 +149,9 @@ struct GlobalSettingsView: View {
             Rectangle().fill(Kin.chatBorder).frame(height: 1)
             Group {
                 switch selection {
-                case .general:    generalPage
-                case .appearance: appearancePage
+                case .general:     generalPage
+                case .appearance:  appearancePage
+                case .inlineAgent: inlineAgentPage
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -299,6 +304,198 @@ struct GlobalSettingsView: View {
             .padding(.bottom, 36)
         }
     }
+
+    // MARK: Inline Agent page
+
+    private var inlineAgentPage: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                inlineAgentSection
+                inlineAgentPermissionsSection
+            }
+            .padding(.horizontal, 36)
+            .padding(.top, 24)
+            .padding(.bottom, 36)
+        }
+    }
+
+    private var inlineAgentSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Inline Agent")
+                .font(Kin.inter(16, weight: .semibold))
+                .foregroundStyle(Kin.textPrimary)
+
+            HStack(spacing: 12) {
+                Image(systemName: "cursorarrow.motionlines")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Kin.accent)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Activate with shake gesture")
+                        .font(Kin.inter(13, weight: .medium))
+                        .foregroundStyle(Kin.textPrimary)
+                    Text("Shake cursor to activate.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Kin.textSecondary)
+                }
+
+                Spacer()
+
+                Toggle("", isOn: Binding(
+                    get: { inlineAgent.isEnabled },
+                    set: { inlineAgent.isEnabled = $0 }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
+            .padding(16)
+            .background(Kin.surface, in: RoundedRectangle(cornerRadius: 8))
+
+            if inlineAgent.isEnabled {
+                shakeSensitivityRow
+                defaultAgentRow
+            }
+        }
+    }
+
+    private var shakeSensitivityRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "waveform")
+                .font(.system(size: 20))
+                .foregroundStyle(Kin.textSecondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Shake Sensitivity")
+                    .font(Kin.inter(13, weight: .medium))
+                    .foregroundStyle(Kin.textPrimary)
+                Text("Higher = easier to trigger.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Kin.textSecondary)
+            }
+
+            Spacer()
+
+            Picker("", selection: Binding(
+                get: { UserDefaults.standard.integer(forKey: "kinShakeSensitivity") == 0 ? 3
+                    : UserDefaults.standard.integer(forKey: "kinShakeSensitivity") },
+                set: {
+                    UserDefaults.standard.set($0, forKey: "kinShakeSensitivity")
+                    inlineAgent.updateSensitivity()
+                }
+            )) {
+                Text("Low").tag(1)
+                Text("Medium-Low").tag(2)
+                Text("Default").tag(3)
+                Text("Medium-High").tag(4)
+                Text("High").tag(5)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(width: 160)
+        }
+        .padding(16)
+        .background(Kin.surface, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var defaultAgentRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(Kin.textSecondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Default Agent")
+                    .font(Kin.inter(13, weight: .medium))
+                    .foregroundStyle(Kin.textPrimary)
+                Text("Which agent handles inline queries.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Kin.textSecondary)
+            }
+
+            Spacer()
+
+            let activeAgents = store.agents.filter { !$0.isArchived }
+            Picker("", selection: Binding(
+                get: { UserDefaults.standard.string(forKey: "kinInlineAgentId") ?? activeAgents.first?.id ?? "" },
+                set: { UserDefaults.standard.set($0, forKey: "kinInlineAgentId") }
+            )) {
+                ForEach(activeAgents) { agent in
+                    Text(agent.name).tag(agent.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(width: 160)
+        }
+        .padding(16)
+        .background(Kin.surface, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var inlineAgentPermissionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Permissions")
+                .font(Kin.inter(16, weight: .semibold))
+                .foregroundStyle(Kin.textPrimary)
+
+            permissionRow(
+                icon: "accessibility",
+                title: "Accessibility Access",
+                subtitle: "Required to read selected text from other apps.",
+                isGranted: inlineAgent.accessibilityGranted,
+                action: { inlineAgent.requestAccessibility() }
+            )
+
+            permissionRow(
+                icon: "camera.fill",
+                title: "Screen Recording",
+                subtitle: "Required for screenshot capture. Prompted on first use.",
+                isGranted: inlineAgent.screenRecordingGranted,
+                action: {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                }
+            )
+        }
+    }
+
+    private func permissionRow(icon: String, title: String, subtitle: String, isGranted: Bool, action: @escaping () -> Void) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundStyle(isGranted ? Kin.statusOnline : Kin.textSecondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(Kin.inter(13, weight: .medium))
+                        .foregroundStyle(Kin.textPrimary)
+                    Text(isGranted ? "Granted" : "Not Granted")
+                        .font(Kin.inter(11, weight: .medium))
+                        .foregroundStyle(isGranted ? Kin.statusOnline : Kin.statusOffline)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            isGranted ? Kin.statusOnline.opacity(0.12) : Kin.statusOffline.opacity(0.10),
+                            in: RoundedRectangle(cornerRadius: 4)
+                        )
+                }
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Kin.textSecondary)
+            }
+
+            Spacer()
+
+            if !isGranted {
+                Button("Grant Access", action: action)
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .background(Kin.surface, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: Appearance page
 
     private var themeSection: some View {
         VStack(alignment: .leading, spacing: 16) {

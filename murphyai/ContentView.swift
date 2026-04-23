@@ -2,10 +2,13 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AgentStore.self) var store
+    @Environment(InlineAgentManager.self) var inlineAgent
+    @Environment(RunnerStore.self) var runnerStore
     @State private var selectedAgentId: String?
     @State private var selectedChannelId: String?
-    @State private var runners: [String: ClaudeRunner] = [:]
     @State private var channelRunners: [String: ChannelRunner] = [:]
+
+    private var runners: [String: ClaudeRunner] { runnerStore.runners }
     @State private var showNewAgent = false
     @State private var showNewChannel = false
     @State private var showGlobalSettings = false
@@ -67,7 +70,7 @@ struct ContentView: View {
             NewChannelSheet().environment(store)
         }
         .sheet(isPresented: $showGlobalSettings) {
-            GlobalSettingsView().environment(store)
+            GlobalSettingsView().environment(store).environment(inlineAgent)
         }
         .onAppear {
             seedRunners()
@@ -79,9 +82,9 @@ struct ContentView: View {
         .onChange(of: store.agents.count) { seedRunners() }
         .onChange(of: store.channels.count) { seedChannelRunners() }
         .onChange(of: selectedAgentId) { _, newId in
-            if let id = newId, runners[id] == nil {
-                runners[id] = ClaudeRunner()
-            }
+            guard let id = newId, runnerStore.runners[id] == nil,
+                  let agent = store.agents.first(where: { $0.id == id }) else { return }
+            _ = runnerStore.runner(for: agent, store: store)
         }
         .onChange(of: selectedChannelId) { _, newId in
             if let id = newId, channelRunners[id] == nil {
@@ -91,10 +94,7 @@ struct ContentView: View {
     }
 
     private func seedRunners() {
-        for agent in store.activeAgents where runners[agent.id] == nil {
-            let url = store.agentDirectory(for: agent).appendingPathComponent("conversation.json")
-            runners[agent.id] = ClaudeRunner(conversationURL: url)
-        }
+        runnerStore.seed(for: store.activeAgents, store: store)
     }
 
     private func seedChannelRunners() {

@@ -135,8 +135,13 @@ struct ThreadView: View {
                            !Calendar.current.isDate(prevDate, inSameDayAs: curDate) {
                             DateDividerRow(date: curDate)
                         }
-                        MessageGroupView(group: group, agent: agent, agentStatus: status)
-                            .id(group.id)
+                        MessageGroupView(
+                            group: group,
+                            agent: agent,
+                            agentStatus: status,
+                            isStreaming: runner.isStreaming && idx == groups.count - 1
+                        )
+                        .id(group.id)
                             .transition(.asymmetric(
                                 insertion: .opacity.combined(with: .offset(y: 8)),
                                 removal: .opacity
@@ -285,6 +290,7 @@ private struct MessageGroupView: View {
     let group: MessageGroup
     let agent: AgentConfig
     var agentStatus: AgentStatus = .offline
+    var isStreaming: Bool = false
 
     private var isUser: Bool { group.role == .user }
     private var senderName: String { isUser ? "You" : agent.name }
@@ -302,7 +308,7 @@ private struct MessageGroupView: View {
             if isUser {
                 UserAvatarCircle()
             } else {
-                AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath, status: agentStatus)
+                AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath, status: agentStatus, animated: isStreaming)
             }
 
             // RIGHT — name + timestamp header + message content
@@ -416,7 +422,7 @@ private struct TypingGroupView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath, status: agentStatus)
+            AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath, status: agentStatus, animated: true)
             TypingRow()
         }
         .padding(.horizontal, 10)

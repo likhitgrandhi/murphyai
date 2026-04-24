@@ -23,44 +23,60 @@ struct ContentView: View {
         return store.activeChannels.first { $0.id == id }
     }
 
+    private var topBarTitle: String {
+        if let channel = selectedChannel { return "Channel - \(channel.name)" }
+        if let agent = selectedAgent { return "Direct message - \(agent.name)" }
+        return "Direct messages"
+    }
+
+    private var topBarIcon: TopBarView.Icon {
+        if selectedChannel != nil { return .hash }
+        if selectedAgent != nil { return .at }
+        return .messages
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            // Server strip — outside the bordered container, full height
-            ServerStripView(showNewChannel: $showNewChannel)
+        VStack(spacing: 0) {
+            TopBarView(title: topBarTitle, icon: topBarIcon)
 
-            // Bordered container: channel sidebar + content area
             HStack(spacing: 0) {
-                SidebarView(
-                    selectedAgentId: $selectedAgentId,
-                    selectedChannelId: $selectedChannelId,
-                    showNewAgent: $showNewAgent,
-                    showNewChannel: $showNewChannel,
-                    showGlobalSettings: $showGlobalSettings,
-                    runners: runners
-                )
+                // Server strip — outside the bordered container, full height
+                ServerStripView(showNewChannel: $showNewChannel)
 
-                Group {
-                    if let channel = selectedChannel, let runner = channelRunners[channel.id] {
-                        ChannelView(channel: channel, runner: runner)
-                            .id(channel.id)
-                    } else if let agent = selectedAgent, let runner = runners[agent.id] {
-                        ThreadView(agent: agent, runner: runner)
-                            .id(agent.id)
-                    } else {
-                        Kin.bg.ignoresSafeArea()
+                // Bordered container: channel sidebar + content area
+                HStack(spacing: 0) {
+                    SidebarView(
+                        selectedAgentId: $selectedAgentId,
+                        selectedChannelId: $selectedChannelId,
+                        showNewAgent: $showNewAgent,
+                        showNewChannel: $showNewChannel,
+                        showGlobalSettings: $showGlobalSettings,
+                        runners: runners
+                    )
+
+                    Group {
+                        if let channel = selectedChannel, let runner = channelRunners[channel.id] {
+                            ChannelView(channel: channel, runner: runner)
+                                .id(channel.id)
+                        } else if let agent = selectedAgent, let runner = runners[agent.id] {
+                            ThreadView(agent: agent, runner: runner)
+                                .id(agent.id)
+                        } else {
+                            Kin.bg.ignoresSafeArea()
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 12))
+                .overlay {
+                    UnevenRoundedRectangle(topLeadingRadius: 12)
+                        .strokeBorder(Kin.border, lineWidth: 1)
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 12))
-            .overlay {
-                UnevenRoundedRectangle(topLeadingRadius: 12)
-                    .strokeBorder(Kin.border, lineWidth: 1)
-            }
-            .padding(.top, 28)
         }
         .background(Kin.serverBg.ignoresSafeArea())
+        .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 960, minHeight: 600)
         .toolbar(.hidden, for: .automatic)
         .sheet(isPresented: $showNewAgent) {
@@ -78,6 +94,7 @@ struct ContentView: View {
             if selectedAgentId == nil && selectedChannelId == nil {
                 selectedAgentId = store.activeAgents.first?.id
             }
+            Task { await store.refreshPixabotAvatars() }
         }
         .onChange(of: store.agents.count) { seedRunners() }
         .onChange(of: store.channels.count) { seedChannelRunners() }

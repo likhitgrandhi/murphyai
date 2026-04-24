@@ -350,7 +350,11 @@ private struct ChannelMessageGroupView: View {
         HStack(alignment: .top, spacing: 10) {
             // 32pt avatar
             if let agent = agentForGroup {
-                AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agentForGroup?.avatarPath)
+                AgentAvatarCircle(
+                    name: agent.name, tint: agent.tint, size: 32,
+                    avatarPath: agentForGroup?.avatarPath,
+                    animated: group.messages.last?.isStreaming ?? false
+                )
             } else {
                 UserAvatarBubble()
             }
@@ -453,7 +457,7 @@ private struct ChannelTypingRow: View {
     let agent: AgentConfig
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath)
+            AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath, animated: true)
             ChannelDotsRow()
         }
         .padding(.horizontal, 10)

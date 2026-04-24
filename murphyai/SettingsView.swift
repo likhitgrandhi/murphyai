@@ -163,7 +163,7 @@ private struct SettingsSubsection<C: View>: View {
 // MARK: - Agent settings modal
 
 enum AgentSettingsSection: Hashable {
-    case identity, systemPrompt, skills, folderAccess, memory, archiveAgent
+    case identity, systemPrompt, skills, folderAccess, memory, fireAgent
 
     var label: String {
         switch self {
@@ -172,7 +172,7 @@ enum AgentSettingsSection: Hashable {
         case .skills:       return "Skills"
         case .folderAccess: return "Folder Access"
         case .memory:       return "Memory"
-        case .archiveAgent: return "Archive Agent"
+        case .fireAgent:    return "Fire Agent"
         }
     }
 }
@@ -184,7 +184,7 @@ struct AgentSettingsModal: View {
     @State private var draft: AgentConfig
     @State private var selection: AgentSettingsSection = .identity
     @State private var newSkill = ""
-    @State private var showArchiveConfirm = false
+    @State private var showFireConfirm = false
 
     init(agent: AgentConfig, isPresented: Binding<Bool>) {
         self.agent = agent
@@ -239,10 +239,10 @@ struct AgentSettingsModal: View {
 
             SidebarSectionHeader(label: "Danger Zone")
             SidebarNavItem(
-                label: AgentSettingsSection.archiveAgent.label,
-                isSelected: selection == .archiveAgent,
+                label: "Fire \(draft.name)",
+                isSelected: selection == .fireAgent,
                 isDanger: true
-            ) { selection = .archiveAgent }
+            ) { selection = .fireAgent }
         }
     }
 
@@ -261,7 +261,7 @@ struct AgentSettingsModal: View {
             SettingsPage(title: "Folder Access") { agentFoldersContent }
         case .memory:
             SettingsPage(title: "Memory") { memoryContent }
-        case .archiveAgent:
+        case .fireAgent:
             SettingsPage(title: "Danger Zone") { agentDangerContent }
         }
     }
@@ -438,28 +438,28 @@ struct AgentSettingsModal: View {
     @ViewBuilder
     private var agentDangerContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Archive Agent")
+            Text("Fire \(agent.name)")
                 .font(Kin.inter(16, weight: .semibold))
                 .foregroundStyle(Kin.textPrimary)
-            Text("The agent will be hidden but its memory and history will be preserved.")
+            Text("This will permanently remove \(agent.name) along with all their memory and history. This cannot be undone.")
                 .font(Kin.inter(13))
                 .foregroundStyle(Kin.textSecondary)
-            Button("Archive Agent") { showArchiveConfirm = true }
+            Button("Fire \(agent.name)") { showFireConfirm = true }
                 .buttonStyle(.bordered)
                 .foregroundStyle(.red.opacity(0.85))
                 .controlSize(.regular)
                 .confirmationDialog(
-                    "Archive \(agent.name)?",
-                    isPresented: $showArchiveConfirm,
+                    "Fire \(agent.name)?",
+                    isPresented: $showFireConfirm,
                     titleVisibility: .visible
                 ) {
-                    Button("Archive", role: .destructive) {
-                        store.archive(agent)
+                    Button("Fire \(agent.name)", role: .destructive) {
+                        store.delete(agent)
                         isPresented = false
                     }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text("The agent will be hidden but its memory will be preserved.")
+                    Text("This permanently deletes \(agent.name) and all their data. This cannot be undone.")
                 }
         }
         .padding(16)

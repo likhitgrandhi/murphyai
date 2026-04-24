@@ -8,14 +8,26 @@ struct AgentAvatarCircle: View {
     let size: CGFloat
     var avatarPath: String? = nil
     var status: AgentStatus? = nil   // nil = no dot
+    var animated: Bool = false       // show GIF while agent is thinking
 
     private var tintColor: Color { Color(hex: tint) ?? Kin.accent }
     private var initial: String { String(name.first ?? "?").uppercased() }
 
+    // Derives the GIF path from the PNG path (same directory, different extension)
+    private var gifPath: String? {
+        guard let p = avatarPath else { return nil }
+        let candidate = p.replacingOccurrences(of: "avatar_pixabot.png", with: "avatar_pixabot.gif")
+        return FileManager.default.fileExists(atPath: candidate) ? candidate : nil
+    }
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Group {
-                if let path = avatarPath,
+                if animated, let gif = gifPath {
+                    AnimatedGifView(path: gif)
+                        .frame(width: size, height: size)
+                        .clipped()
+                } else if let path = avatarPath,
                    let nsImage = NSImage(contentsOfFile: path) {
                     Image(nsImage: nsImage)
                         .resizable()
@@ -69,6 +81,42 @@ struct AgentAvatarCircle: View {
     }
 }
 
+// MARK: - Top bar (40pt, spans full window width above server strip + content)
+
+struct TopBarView: View {
+    enum Icon {
+        case hash, at, messages
+
+        var systemName: String {
+            switch self {
+            case .hash: return "number"
+            case .at: return "at"
+            case .messages: return "bubble.left.and.bubble.right.fill"
+            }
+        }
+    }
+
+    let title: String
+    let icon: Icon
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 6) {
+                Image(systemName: icon.systemName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Kin.textSecondary)
+                Text(title)
+                    .font(Kin.inter(14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 40)
+        .background(Kin.serverBg)
+    }
+}
+
 // MARK: - Server strip (72pt, sits OUTSIDE the bordered container)
 
 struct ServerStripView: View {
@@ -109,7 +157,7 @@ struct ServerStripView: View {
 
             Spacer()
         }
-        .padding(.top, 36)
+        .padding(.top, 12)
         .padding(.bottom, 10)
         .frame(width: 72)
         .frame(maxHeight: .infinity)
@@ -140,9 +188,9 @@ struct SidebarView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
-                    if !store.activeChannels.isEmpty {
-                        VStack(alignment: .leading, spacing: 0) {
-                            SidebarSectionHeader(title: "CHANNELS", onAdd: { showNewChannel = true })
+                    VStack(alignment: .leading, spacing: 0) {
+                        SidebarSectionHeader(title: "CHANNELS", onAdd: { showNewChannel = true })
+                        if !store.activeChannels.isEmpty {
                             VStack(spacing: 2) {
                                 ForEach(store.activeChannels) { channel in
                                     SidebarChannelRow(
@@ -156,11 +204,11 @@ struct SidebarView: View {
                                 }
                             }
                             .padding(.horizontal, 8)
-
-                            Rectangle().fill(Kin.border).frame(height: 1)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 4)
                         }
+
+                        Rectangle().fill(Kin.border).frame(height: 1)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 4)
                     }
 
                     VStack(alignment: .leading, spacing: 0) {

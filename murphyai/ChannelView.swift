@@ -49,7 +49,7 @@ struct ChannelView: View {
                         .foregroundStyle(Kin.textTertiary)
                     Text(channel.name)
                         .font(Kin.inter(16, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Kin.textPrimary)
                 }
                 if !channel.topic.isEmpty {
                     Rectangle()
@@ -350,7 +350,11 @@ private struct ChannelMessageGroupView: View {
         HStack(alignment: .top, spacing: 10) {
             // 32pt avatar
             if let agent = agentForGroup {
-                AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agentForGroup?.avatarPath)
+                AgentAvatarCircle(
+                    name: agent.name, tint: agent.tint, size: 32,
+                    avatarPath: agentForGroup?.avatarPath,
+                    animated: group.messages.last?.isStreaming ?? false
+                )
             } else {
                 UserAvatarBubble()
             }
@@ -360,7 +364,7 @@ private struct ChannelMessageGroupView: View {
                 HStack(spacing: 8) {
                     Text(senderName)
                         .font(Kin.inter(14, weight: .medium))
-                        .foregroundStyle(agentForGroup.map { Color(hex: $0.tint) ?? Kin.accent } ?? .white)
+                        .foregroundStyle(agentForGroup.map { Color(hex: $0.tint) ?? Kin.accent } ?? Kin.textPrimary)
                     if let ts = timestamp {
                         Text(ts)
                             .font(Kin.inter(11))
@@ -453,7 +457,7 @@ private struct ChannelTypingRow: View {
     let agent: AgentConfig
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath)
+            AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 32, avatarPath: agent.avatarPath, animated: true)
             ChannelDotsRow()
         }
         .padding(.horizontal, 10)

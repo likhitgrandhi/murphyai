@@ -18,14 +18,14 @@ enum KinTheme: String, CaseIterable {
     var previewSidebar: Color {
         switch self {
         case .dark:  Color(hex: "#000000")!
-        case .light: Color(hex: "#F3F3F4")!
+        case .light: Color(hex: "#fbfbfa")!
         }
     }
 
     var previewContent: Color {
         switch self {
         case .dark:  Color(hex: "#0d0d12")!
-        case .light: Color(hex: "#f5f5ff")!
+        case .light: Color(hex: "#ffffff")!
         }
     }
 }
@@ -43,35 +43,35 @@ enum Kin {
     }
 
     // Surfaces & containers
-    static let bg               = adaptive(dark: "#0d0d12", light: "#f5f5ff")  // main content area
-    static let sidebarBg        = adaptive(dark: "#000000", light: "#F3F3F4")  // channel sidebar
-    static let serverBg         = adaptive(dark: "#000000", light: "#E8E8EA")  // 72px server strip
-    static let surface          = adaptive(dark: "#1a1a22", light: "#ebebf7")  // cards, code blocks
-    static let surfaceHover     = adaptive(dark: "#252530", light: "#dededf")  // hover states
-    static let profileBar       = adaptive(dark: "#090910", light: "#dcdcea")  // profile bar bg
-    static let inputBg          = adaptive(dark: "#13131a", light: "#ededfa")  // chat input bg
-    static let searchBarBg      = adaptive(dark: "#0a0a10", light: "#e4e4f0")  // sidebar search pill
-    static let chatSearchBg     = adaptive(dark: "#09090e", light: "#f0f0fc")  // chat header search
-    static let avatarBg         = adaptive(dark: "#22222e", light: "#c4c4d8")  // default avatar circle
+    static let bg               = adaptive(dark: "#0d0d12", light: "#ffffff")  // main content area
+    static let sidebarBg        = adaptive(dark: "#000000", light: "#fbfbfa")  // channel sidebar
+    static let serverBg         = adaptive(dark: "#000000", light: "#f7f7f5")  // 72px server strip
+    static let surface          = adaptive(dark: "#1a1a22", light: "#fbfbfa")  // cards, code blocks
+    static let surfaceHover     = adaptive(dark: "#252530", light: "#efefed")  // hover states
+    static let profileBar       = adaptive(dark: "#090910", light: "#f7f7f5")  // profile bar bg
+    static let inputBg          = adaptive(dark: "#13131a", light: "#efefed")  // chat input bg
+    static let searchBarBg      = adaptive(dark: "#0a0a10", light: "#efefed")  // sidebar search pill
+    static let chatSearchBg     = adaptive(dark: "#09090e", light: "#efefed")  // chat header search
+    static let avatarBg         = adaptive(dark: "#22222e", light: "#ebeced")  // default avatar circle
 
     // Borders
-    static let border           = adaptive(dark: "#18181f", light: "#d8d8e8")  // dividers
-    static let chatBorder       = adaptive(dark: "#1e1e28", light: "#dedeed")  // chat header border
-    static let chatSearchBorder = adaptive(dark: "#1a1a28", light: "#d0d0e0")  // chat search border
+    static let border           = adaptive(dark: "#18181f", light: "#e9e9e7")  // dividers
+    static let chatBorder       = adaptive(dark: "#1e1e28", light: "#e9e9e7")  // chat header border
+    static let chatSearchBorder = adaptive(dark: "#1a1a28", light: "#e9e9e7")  // chat search border
 
     // Accent & selection
-    static let accent           = adaptive(dark: "#949CF7", light: "#6c74f0")  // blurple CTA
-    static let sidebarSelected  = adaptive(dark: "#1a1a24", light: "#d0d0e4")  // selected row bg
+    static let accent           = adaptive(dark: "#949CF7", light: "#2eaadc")  // CTA / focus
+    static let sidebarSelected  = adaptive(dark: "#1a1a24", light: "#ebeced")  // selected row bg
 
     // Text hierarchy
-    static let textPrimary      = adaptive(dark: "#dcddde", light: "#111111")  // body text
-    static let textSecondary    = adaptive(dark: "#b9bbbe", light: "#444444")  // muted labels
-    static let textTertiary     = adaptive(dark: "#8e9297", light: "#666666")  // timestamps
-    static let textQuaternary   = adaptive(dark: "#72767d", light: "#888888")  // placeholders
-    static let codeText         = adaptive(dark: "#c9d1d9", light: "#1a1a2e")  // code mono text
+    static let textPrimary      = adaptive(dark: "#dcddde", light: "#37352f")  // body text
+    static let textSecondary    = adaptive(dark: "#b9bbbe", light: "#787774")  // muted labels
+    static let textTertiary     = adaptive(dark: "#8e9297", light: "#9a9a97")  // timestamps
+    static let textQuaternary   = adaptive(dark: "#72767d", light: "#9a9a97")  // placeholders
+    static let codeText         = adaptive(dark: "#c9d1d9", light: "#37352f")  // code mono text
 
-    // Fixed status colors — universal across themes
-    static let statusOnline     = Color(hex: "#3BA55D")!
+    // Status colors (online is theme-aware per the Notion-inspired spec)
+    static let statusOnline     = adaptive(dark: "#3BA55D", light: "#0f7b6c")
     static let statusSnooze     = Color(hex: "#FAA61A")!
     static let statusOffline    = Color(hex: "#ED4245")!
 
@@ -83,7 +83,7 @@ enum Kin {
         let variationKey = NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
         let descriptor = NSFontDescriptor(fontAttributes: [
             .name: "InterVariable",
-            variationKey: [2003265652: interWght(weight)]   // 0x77676874 = 'wght' tag
+            variationKey: [2003265652: wght(weight, min: 100)]   // 0x77676874 = 'wght' tag
         ])
         if let nsFont = NSFont(descriptor: descriptor, size: size) {
             return Font(nsFont)
@@ -91,19 +91,35 @@ enum Kin {
         return .system(size: size)
     }
 
-    private static func interWght(_ weight: Font.Weight) -> Double {
-        switch weight {
-        case .ultraLight: return 100
-        case .thin:       return 200
-        case .light:      return 300
-        case .regular:    return 400
-        case .medium:     return 500
-        case .semibold:   return 600
-        case .bold:       return 700
-        case .heavy:      return 800
-        case .black:      return 900
-        default:          return 400
+    // MARK: - Figtree variable font (range 300–900)
+
+    static func figtree(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        let variationKey = NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
+        let descriptor = NSFontDescriptor(fontAttributes: [
+            .name: "Figtree",
+            variationKey: [2003265652: wght(weight, min: 300)]   // 0x77676874 = 'wght' tag
+        ])
+        if let nsFont = NSFont(descriptor: descriptor, size: size) {
+            return Font(nsFont)
         }
+        return .system(size: size)
+    }
+
+    private static func wght(_ weight: Font.Weight, min: Double) -> Double {
+        let raw: Double
+        switch weight {
+        case .ultraLight: raw = 100
+        case .thin:       raw = 200
+        case .light:      raw = 300
+        case .regular:    raw = 400
+        case .medium:     raw = 500
+        case .semibold:   raw = 600
+        case .bold:       raw = 700
+        case .heavy:      raw = 800
+        case .black:      raw = 900
+        default:          raw = 400
+        }
+        return max(raw, min)
     }
 }
 

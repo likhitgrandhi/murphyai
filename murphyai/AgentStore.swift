@@ -7,11 +7,40 @@ class AgentStore {
 
     let baseDir: URL
 
-    init() {
-        baseDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".kin", isDirectory: true)
+    init(workspaceDir: URL? = nil) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        AgentStore.migrateIfNeeded(home: home)
+        let defaultDir = home.appendingPathComponent(
+            ".kin/workspaces/default-local", isDirectory: true)
+        baseDir = workspaceDir ?? defaultDir
         loadAgents()
         loadChannels()
+    }
+
+    // Moves the old flat ~/.kin/{agents,channels,...} into
+    // ~/.kin/workspaces/default-local/ exactly once.
+    static func migrateIfNeeded(home: URL) {
+        let fm = FileManager.default
+        let oldRoot = home.appendingPathComponent(".kin")
+        let newRoot = home.appendingPathComponent(".kin/workspaces/default-local")
+
+        guard fm.fileExists(atPath: oldRoot.path),
+              !fm.fileExists(atPath: newRoot.path)
+        else { return }
+
+        try? fm.createDirectory(at: newRoot, withIntermediateDirectories: true)
+
+        guard let contents = try? fm.contentsOfDirectory(
+            at: oldRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: .skipsHiddenFiles)
+        else { return }
+
+        for item in contents where item.lastPathComponent != "workspaces" {
+            try? fm.moveItem(
+                at: item,
+                to: newRoot.appendingPathComponent(item.lastPathComponent))
+        }
     }
 
     // MARK: - Load
@@ -110,6 +139,51 @@ class AgentStore {
 
     func agentDirectory(for agent: AgentConfig) -> URL {
         baseDir.appendingPathComponent(agent.id, isDirectory: true)
+    }
+
+    var avatarsDir: URL {
+        let dir = baseDir.appendingPathComponent("avatars", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // MARK: - Pixabot avatar refresh
+
+    /// Downloads pixabot avatars for all agents in parallel and persists the paths.
+    /// Skips only agents whose PNG already exists on disk with a valid size.
+    func refreshPixabotAvatars() async {
+        let snapshot = agents
+        await withTaskGroup(of: (String, String)?.self) { group in
+            for agent in snapshot {
+                let dest = agentDirectory(for: agent)
+                    .appendingPathComponent("avatar_pixabot.png")
+                let agentId = agent.id
+                let agentName = agent.name
+                let gifDest = agentDirectory(for: agent)
+                    .appendingPathComponent("avatar_pixabot.gif")
+                group.addTask {
+                    guard let path = await PixabotAvatar.downloadAvatar(for: agentName, to: dest)
+                    else { return nil }
+                    // Download animated GIF alongside; fire-and-forget if it fails
+                    _ = await PixabotAvatar.downloadAvatar(for: agentName, to: gifDest, animated: true)
+                    return (agentId, path)
+                }
+            }
+
+            for await result in group {
+                guard let (agentId, path) = result,
+                      let i = agents.firstIndex(where: { $0.id == agentId })
+                else { continue }
+                agents[i].avatarPath = path
+                let updated = agents[i]
+                if let data = try? JSONEncoder().encode(updated) {
+                    try? data.write(
+                        to: agentDirectory(for: updated).appendingPathComponent("config.json"),
+                        options: .atomic
+                    )
+                }
+            }
+        }
     }
 
     func memoryURL(for agent: AgentConfig) -> URL {

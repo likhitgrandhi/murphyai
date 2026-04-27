@@ -4,14 +4,21 @@ struct ContentView: View {
     @Environment(AgentStore.self) var store
     @Environment(InlineAgentManager.self) var inlineAgent
     @Environment(RunnerStore.self) var runnerStore
+    @Environment(SessionStore.self) var session
+    @Environment(WorkspaceStore.self) var workspaceStore
+    @Environment(SharedChannelStore.self) var sharedChannels
+    @Environment(AgentRoster.self) var agentRoster
     @State private var selectedAgentId: String?
     @State private var selectedChannelId: String?
+    @State private var selectedSharedChannelId: UUID?
     @State private var channelRunners: [String: ChannelRunner] = [:]
 
     private var runners: [String: ClaudeRunner] { runnerStore.runners }
     @State private var showNewAgent = false
     @State private var showNewChannel = false
+    @State private var showNewDM = false
     @State private var showGlobalSettings = false
+    @State private var showInviteMembers = false
 
     private var selectedAgent: AgentConfig? {
         guard let id = selectedAgentId else { return nil }
@@ -23,13 +30,22 @@ struct ContentView: View {
         return store.activeChannels.first { $0.id == id }
     }
 
+    private var selectedSharedChannel: ServerChannel? {
+        guard let id = selectedSharedChannelId else { return nil }
+        return sharedChannels.channels.first { $0.id == id }
+    }
+
     private var topBarTitle: String {
+        if let ch = selectedSharedChannel {
+            return ch.isDM ? "Direct message - \(ch.displayName)" : "Channel - \(ch.displayName)"
+        }
         if let channel = selectedChannel { return "Channel - \(channel.name)" }
         if let agent = selectedAgent { return "Direct message - \(agent.name)" }
         return "Direct messages"
     }
 
     private var topBarIcon: TopBarView.Icon {
+        if let ch = selectedSharedChannel { return ch.isDM ? .at : .hash }
         if selectedChannel != nil { return .hash }
         if selectedAgent != nil { return .at }
         return .messages
@@ -48,14 +64,20 @@ struct ContentView: View {
                     SidebarView(
                         selectedAgentId: $selectedAgentId,
                         selectedChannelId: $selectedChannelId,
+                        selectedSharedChannelId: $selectedSharedChannelId,
                         showNewAgent: $showNewAgent,
                         showNewChannel: $showNewChannel,
+                        showNewDM: $showNewDM,
                         showGlobalSettings: $showGlobalSettings,
+                        showInviteMembers: $showInviteMembers,
                         runners: runners
                     )
 
                     Group {
-                        if let channel = selectedChannel, let runner = channelRunners[channel.id] {
+                        if let shared = selectedSharedChannel {
+                            SharedChannelView(channel: shared)
+                                .id(shared.id)
+                        } else if let channel = selectedChannel, let runner = channelRunners[channel.id] {
                             ChannelView(channel: channel, runner: runner)
                                 .id(channel.id)
                         } else if let agent = selectedAgent, let runner = runners[agent.id] {
@@ -83,10 +105,37 @@ struct ContentView: View {
             NewAgentSheet(editingAgent: nil).environment(store)
         }
         .sheet(isPresented: $showNewChannel) {
-            NewChannelSheet().environment(store)
+            NewChannelSheet(onCreated: { result in
+                switch result {
+                case .shared(let ch):
+                    selectedSharedChannelId = ch.id
+                    selectedAgentId = nil
+                    selectedChannelId = nil
+                case .personal(let ch):
+                    selectedChannelId = ch.id
+                    selectedAgentId = nil
+                    selectedSharedChannelId = nil
+                }
+            })
+            .environment(store)
+            .environment(sharedChannels)
+            .environment(agentRoster)
+            .environment(session)
+        }
+        .sheet(isPresented: $showNewDM) {
+            NewDMSheet(onOpened: { ch in
+                selectedSharedChannelId = ch.id
+                selectedAgentId = nil
+                selectedChannelId = nil
+            })
+            .environment(sharedChannels)
+            .environment(session)
         }
         .sheet(isPresented: $showGlobalSettings) {
-            GlobalSettingsView().environment(store).environment(inlineAgent)
+            GlobalSettingsView().environment(store).environment(inlineAgent).environment(session).environment(workspaceStore)
+        }
+        .sheet(isPresented: $showInviteMembers) {
+            InviteMembersView().environment(workspaceStore)
         }
         .onAppear {
             seedRunners()

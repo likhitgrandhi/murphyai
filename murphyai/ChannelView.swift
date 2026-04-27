@@ -49,7 +49,7 @@ struct ChannelView: View {
                         .foregroundStyle(Kin.textTertiary)
                     Text(channel.name)
                         .font(Kin.inter(16, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Kin.textPrimary)
                 }
                 if !channel.topic.isEmpty {
                     Rectangle()
@@ -364,7 +364,7 @@ private struct ChannelMessageGroupView: View {
                 HStack(spacing: 8) {
                     Text(senderName)
                         .font(Kin.inter(14, weight: .medium))
-                        .foregroundStyle(agentForGroup.map { Color(hex: $0.tint) ?? Kin.accent } ?? .white)
+                        .foregroundStyle(agentForGroup.map { Color(hex: $0.tint) ?? Kin.accent } ?? Kin.textPrimary)
                     if let ts = timestamp {
                         Text(ts)
                             .font(Kin.inter(11))

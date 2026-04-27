@@ -53,7 +53,7 @@ struct ThreadView: View {
                     AgentAvatarCircle(name: agent.name, tint: agent.tint, size: 20, avatarPath: agent.avatarPath, status: status)
                     Text(agent.name)
                         .font(Kin.inter(16, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Kin.textPrimary)
                 }
                 Rectangle()
                     .fill(Kin.textTertiary.opacity(0.4))
@@ -319,7 +319,7 @@ private struct MessageGroupView: View {
                         .font(Kin.inter(14, weight: .medium))
                         .foregroundStyle(
                             isUser
-                                ? .white
+                                ? Kin.textPrimary
                                 : (Color(hex: agent.tint) ?? Kin.accent)
                         )
                     if let ts = timestamp {

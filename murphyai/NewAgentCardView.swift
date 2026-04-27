@@ -6,14 +6,29 @@ private enum AppSettingsSection: Hashable {
     case general
     case appearance
     case inlineAgent
+    case people
 
     var label: String {
         switch self {
         case .general:     return "General"
         case .appearance:  return "Appearance"
         case .inlineAgent: return "Inline Agent"
+        case .people:      return "People"
         }
     }
+
+    var icon: String {
+        switch self {
+        case .general:     return "gearshape"
+        case .appearance:  return "paintbrush"
+        case .inlineAgent: return "sparkles"
+        case .people:      return "person.2"
+        }
+    }
+}
+
+private enum AccountSection: Hashable {
+    case account
 }
 
 // MARK: - Global settings view (macOS Settings scene)
@@ -23,8 +38,11 @@ private enum AppSettingsSection: Hashable {
 struct GlobalSettingsView: View {
     @Environment(AgentStore.self) var store
     @Environment(InlineAgentManager.self) var inlineAgent
+    @Environment(SessionStore.self) var session
+    @Environment(WorkspaceStore.self) var workspaceStore
     @Environment(\.dismiss) private var dismiss
     @State private var selection: AppSettingsSection = .general
+    @State private var showSignOutConfirm = false
     @AppStorage("kinTheme") private var selectedTheme = "dark"
     @AppStorage("kinClaudeModel") private var selectedModel = "sonnet"
 
@@ -47,6 +65,8 @@ struct GlobalSettingsView: View {
             Rectangle().fill(Kin.border).frame(height: 1)
             otherSettingsGroup
             Spacer(minLength: 0)
+            Rectangle().fill(Kin.border).frame(height: 1)
+            accountFooter
         }
         .frame(width: 252)
         .frame(maxHeight: .infinity)
@@ -56,26 +76,64 @@ struct GlobalSettingsView: View {
         }
     }
 
-    // Profile header: 32px avatar + "Kin" 14px semibold + "macOS" 12px at 64%
+    private var accountFooter: some View {
+        Button {
+            showSignOutConfirm = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.red.opacity(0.7))
+                    .frame(width: 16)
+                Text("Sign out")
+                    .font(Kin.inter(13))
+                    .foregroundStyle(Color.red.opacity(0.7))
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog(
+            "Sign out of Kin?",
+            isPresented: $showSignOutConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Sign out", role: .destructive) {
+                dismiss()
+                Task { await session.signOut() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll need to enter your email and a one-time code to sign back in.")
+        }
+    }
+
+    // Profile header: user avatar + display name + email
     private var profileHeader: some View {
-        HStack(spacing: 8) {
+        let user = session.currentUser
+        return HStack(spacing: 8) {
             ZStack {
                 Circle()
                     .fill(Kin.accent.opacity(0.18))
                     .frame(width: 32, height: 32)
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 14, weight: .heavy))
+                Text(user?.initials ?? "?")
+                    .font(Kin.inter(12, weight: .bold))
                     .foregroundStyle(Kin.accent)
             }
             .overlay(Circle().stroke(Kin.accent.opacity(0.35), lineWidth: 1.5))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Kin")
-                    .font(Kin.inter(14, weight: .semibold))
+                Text(user?.displayName ?? user?.email ?? "Account")
+                    .font(Kin.inter(13, weight: .semibold))
                     .foregroundStyle(Kin.textPrimary)
-                Text("macOS")
-                    .font(Kin.inter(12))
-                    .foregroundStyle(Kin.textPrimary.opacity(0.64))
+                    .lineLimit(1)
+                if user?.displayName != nil {
+                    Text(user?.email ?? "")
+                        .font(Kin.inter(11))
+                        .foregroundStyle(Kin.textPrimary.opacity(0.55))
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.horizontal, 12)
@@ -109,21 +167,31 @@ struct GlobalSettingsView: View {
     }
 
     private var otherSettingsGroup: some View {
-        Text("OTHER SETTINGS")
-            .font(Kin.inter(12))
-            .foregroundStyle(Kin.textSecondary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("WORKSPACE")
+                    .font(Kin.inter(12))
+                    .foregroundStyle(Kin.textSecondary)
+                Spacer()
+            }
             .padding(.horizontal, 12)
             .padding(.top, 16)
             .padding(.bottom, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 4) {
+                navButton(.people)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 16)
+        }
     }
 
     // Nav item: 36px tall, 4px radius, hash icon + label
     private func navButton(_ sec: AppSettingsSection) -> some View {
         Button { selection = sec } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "number")
-                    .font(.system(size: 16, weight: .medium))
+            HStack(spacing: 8) {
+                Image(systemName: sec.icon)
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(selection == sec ? Kin.textPrimary : Kin.textQuaternary)
                     .frame(width: 16, height: 16)
                 Text(sec.label)
@@ -152,6 +220,7 @@ struct GlobalSettingsView: View {
                 case .general:     generalPage
                 case .appearance:  appearancePage
                 case .inlineAgent: inlineAgentPage
+                case .people:      PeoplePage().environment(workspaceStore).environment(session)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
